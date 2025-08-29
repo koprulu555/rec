@@ -10,49 +10,44 @@ $pageCount = 4;
 $sourceUrlRaw = 'https://raw.githubusercontent.com/kerimmkirac/cs-kerim2/main/RecTV/src/main/kotlin/com/kerimmkirac/RecTV.kt';
 $proxyUrl = 'https://api.codetabs.com/v1/proxy/?quest=' . urlencode($sourceUrlRaw);
 
-// Değerler burada tutulacak
+// Güncel değerlerin tutulacağı değişkenler
 $baseUrl    = $defaultBaseUrl;
 $suffix     = $defaultSuffix;
 $userAgent  = $defaultUserAgent;
 $referer    = $defaultReferer;
 
-// Fonksiyon: Github’dan (proxy ile) dosya çek
+// Github içeriğini çekmek için fonksiyon (önce normal, sonra proxy ile)
 function fetchGithubContent($sourceUrlRaw, $proxyUrl) {
-    // Önce doğrudan dene
     $githubContent = @file_get_contents($sourceUrlRaw);
     if ($githubContent !== FALSE) return $githubContent;
-
-    // Olmazsa proxy ile dene
     $githubContentProxy = @file_get_contents($proxyUrl);
     if ($githubContentProxy !== FALSE) return $githubContentProxy;
-
-    // İkisi de olmazsa false döner
     return FALSE;
 }
 
-// Github’dan veri çek (öncelikli)
 $githubContent = fetchGithubContent($sourceUrlRaw, $proxyUrl);
 
+// Regex ile her bir değeri tek tek çek (öncelik github, sonra varsayılan)
 if ($githubContent !== FALSE) {
-    // Güncel mainUrl
+    // mainUrl
     if (preg_match('/override\s+var\s+mainUrl\s*=\s*"([^"]+)"/', $githubContent, $baseUrlMatch)) {
         $baseUrl = $baseUrlMatch[1];
     }
-    // Güncel swKey (suffix)
+    // swKey
     if (preg_match('/private\s+val\s+swKey\s*=\s*"([^"]+)"/', $githubContent, $suffixMatch)) {
         $suffix = $suffixMatch[1];
     }
-    // Güncel User-Agent
+    // user-agent
     if (preg_match('/user-agent"\s*to\s*"([^"]+)"/', $githubContent, $uaMatch)) {
         $userAgent = $uaMatch[1];
     }
-    // Güncel Referer
+    // referer
     if (preg_match('/Referer"\s*to\s*"([^"]+)"/', $githubContent, $refMatch)) {
         $referer = $refMatch[1];
     }
 }
 
-// BaseUrl’nin ve suffix’in çalışıp çalışmadığını test et (başarısızsa sadece onlar default’a döner)
+// BaseUrl ve suffix çalışıyorsa güncel, çalışmıyorsa varsayılana dönsün
 function isBaseUrlWorking($baseUrl, $suffix, $userAgent) {
     $testUrl = $baseUrl . '/api/channel/by/filtres/0/0/0/' . $suffix;
     $opts = [
@@ -65,15 +60,14 @@ function isBaseUrlWorking($baseUrl, $suffix, $userAgent) {
     return $response !== FALSE;
 }
 if (!isBaseUrlWorking($baseUrl, $suffix, $userAgent)) {
-    // Sadece baseUrl ve suffix default’a döner, userAgent ve referer github’dan alınmaya devam eder
     $baseUrl = $defaultBaseUrl;
     $suffix = $defaultSuffix;
 }
 
-// M3U oluştur
+// M3U çıktısı oluştur
 $m3uContent = "#EXTM3U\n";
 
-// API isteklerinde kullanılacak header’lar (her zaman en güncel olanı kullan)
+// API çağrılarında github'dan/varsayılanlardan alınan user-agent ve referer kullanılır
 $options = [
     'http' => [
         'header' => "User-Agent: $userAgent\r\nReferer: $referer\r\n"
@@ -94,16 +88,16 @@ for ($page = 0; $page < $pageCount; $page++) {
             foreach ($content['sources'] as $source) {
                 if (($source['type'] ?? '') === 'm3u8' && isset($source['url'])) {
                     $title = $content['title'] ?? '';
-                    // Logo linkleri de güncel baseUrl ile oluşturulsun!
                     $image = isset($content['image']) ? (
                         (strpos($content['image'], 'http') === 0) ? $content['image'] : $baseUrl . '/' . ltrim($content['image'], '/')
                     ) : '';
                     $categories = isset($content['categories']) && is_array($content['categories'])
                         ? implode(", ", array_column($content['categories'], 'title'))
                         : '';
+                    // M3U çıktısında istenen user-agent ve referer sabit olmalı!
                     $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categories\", $title\n";
                     $m3uContent .= "#EXTVLCOPT:http-user-agent=googleusercontent\n";
-                    $m3uContent .= "#EXTVLCOPT:http-referrer=$referer\n";
+                    $m3uContent .= "#EXTVLCOPT:http-referrer=https://twitter.com/\n";
                     $m3uContent .= "{$source['url']}\n";
                 }
             }
@@ -144,7 +138,7 @@ foreach ($movieApis as $movieApi => $categoryName) {
                         ) : '';
                         $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categoryName\", $title\n";
                         $m3uContent .= "#EXTVLCOPT:http-user-agent=googleusercontent\n";
-                        $m3uContent .= "#EXTVLCOPT:http-referrer=$referer\n";
+                        $m3uContent .= "#EXTVLCOPT:http-referrer=https://twitter.com/\n";
                         $m3uContent .= "{$source['url']}\n";
                     }
                 }
@@ -175,7 +169,7 @@ foreach ($seriesApis as $seriesApi => $categoryName) {
                         ) : '';
                         $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categoryName\", $title\n";
                         $m3uContent .= "#EXTVLCOPT:http-user-agent=googleusercontent\n";
-                        $m3uContent .= "#EXTVLCOPT:http-referrer=$referer\n";
+                        $m3uContent .= "#EXTVLCOPT:http-referrer=https://twitter.com/\n";
                         $m3uContent .= "{$source['url']}\n";
                     }
                 }
@@ -187,5 +181,5 @@ foreach ($seriesApis as $seriesApi => $categoryName) {
 // Dosyaya kaydet
 file_put_contents('output.m3u', $m3uContent);
 
-echo "Oluşturulan M3U dosyası: rec.m3u\n";
+echo "Oluşturulan M3U dosyası: output.m3u\n";
 ?>
