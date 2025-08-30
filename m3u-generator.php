@@ -1,7 +1,7 @@
 <?php
 // Varsayılanlar (fallback)
-$defaultBaseUrl = 'https://m.prectv49.sbs';
-$defaultSuffix = '4F5A9C3D9A86FA54EACEDDD635185/c3c5bd17-e37b-4b94-a944-8a3688a30452/';
+$defaultMainUrl = 'https://m.prectv49.sbs';
+$defaultSwKey = '4F5A9C3D9A86FA54EACEDDD635185/c3c5bd17-e37b-4b94-a944-8a3688a30452/';
 $defaultUserAgent = 'Dart/3.7 (dart:io)';
 $defaultReferer = 'https://twitter.com/';
 $pageCount = 4;
@@ -38,27 +38,29 @@ function fetchGithubContent($sourceUrlRaw, $proxyUrl) {
 
 function parseGithubHeaders($githubContent) {
     $headers = [
-        'baseUrl' => null,
-        'suffix' => null,
+        'mainUrl' => null,
+        'swKey' => null,
         'userAgent' => null,
         'referer' => null
     ];
     
+    // mainUrl - Kotlin syntax'ına uygun regex
     if (preg_match('/override\s+var\s+mainUrl\s*=\s*"([^"]+)"/', $githubContent, $match)) {
-        $headers['baseUrl'] = $match[1];
+        $headers['mainUrl'] = $match[1];
     }
     
+    // swKey - Kotlin syntax'ına uygun regex
     if (preg_match('/private\s+(val|var)\s+swKey\s*=\s*"([^"]+)"/', $githubContent, $match)) {
-        $headers['suffix'] = $match[2];
+        $headers['swKey'] = $match[2];
     }
     
+    // user-agent - headers mapOf içinde
     if (preg_match('/headers\s*=\s*mapOf\([^)]*"user-agent"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
         $headers['userAgent'] = $match[1];
     }
     
+    // referer - headers mapOf içinde
     if (preg_match('/headers\s*=\s*mapOf\([^)]*"Referer"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
-        $headers['referer'] = $match[1];
-    } else if (preg_match('/referer\s*=\s*"([^"]+)"/', $githubContent, $match)) {
         $headers['referer'] = $match[1];
     }
     
@@ -66,8 +68,8 @@ function parseGithubHeaders($githubContent) {
 }
 
 // 2. ADIM: API test fonksiyonu
-function testApiWithHeaders($baseUrl, $suffix, $userAgent, $referer) {
-    $testUrl = $baseUrl . '/api/channel/by/filtres/0/0/0/' . $suffix;
+function testApiWithHeaders($mainUrl, $swKey, $userAgent, $referer) {
+    $testUrl = $mainUrl . '/api/channel/by/filtres/0/0/0/' . $swKey;
     
     $opts = [
         'http' => [
@@ -100,48 +102,48 @@ if ($githubContent !== FALSE) {
     $githubHeaders = parseGithubHeaders($githubContent);
     
     // Github'dan gelen değerlerin hepsi var mı kontrol et
-    if ($githubHeaders['baseUrl'] && $githubHeaders['suffix'] && 
+    if ($githubHeaders['mainUrl'] && $githubHeaders['swKey'] && 
         $githubHeaders['userAgent'] && $githubHeaders['referer']) {
         
         echo "Github'dan header bilgileri alındı. API testi yapılıyor...\n";
         
         // İLK ETAP: Github header'ları ile API testi yap
         if (testApiWithHeaders(
-            $githubHeaders['baseUrl'], 
-            $githubHeaders['suffix'], 
+            $githubHeaders['mainUrl'], 
+            $githubHeaders['swKey'], 
             $githubHeaders['userAgent'], 
             $githubHeaders['referer']
         )) {
             echo "✓ Github header'ları ile API başarılı! Github değerleri kullanılıyor.\n";
-            $baseUrl = $githubHeaders['baseUrl'];
-            $suffix = $githubHeaders['suffix'];
+            $mainUrl = $githubHeaders['mainUrl'];
+            $swKey = $githubHeaders['swKey'];
             $userAgent = $githubHeaders['userAgent'];
             $referer = $githubHeaders['referer'];
         } else {
             echo "✗ Github header'ları ile API başarısız! Varsayılan değerler kullanılıyor.\n";
-            $baseUrl = $defaultBaseUrl;
-            $suffix = $defaultSuffix;
+            $mainUrl = $defaultMainUrl;
+            $swKey = $defaultSwKey;
             $userAgent = $defaultUserAgent;
             $referer = $defaultReferer;
         }
     } else {
         echo "✗ Github'dan eksik header bilgileri! Varsayılan değerler kullanılıyor.\n";
-        $baseUrl = $defaultBaseUrl;
-        $suffix = $defaultSuffix;
+        $mainUrl = $defaultMainUrl;
+        $swKey = $defaultSwKey;
         $userAgent = $defaultUserAgent;
         $referer = $defaultReferer;
     }
 } else {
     echo "✗ Github içeriği alınamadı! Varsayılan değerler kullanılıyor.\n";
-    $baseUrl = $defaultBaseUrl;
-    $suffix = $defaultSuffix;
+    $mainUrl = $defaultMainUrl;
+    $swKey = $defaultSwKey;
     $userAgent = $defaultUserAgent;
     $referer = $defaultReferer;
 }
 
 // 4. ADIM: SONUÇLARI GÖSTER
-echo "Kullanılan Base URL: $baseUrl\n";
-echo "Kullanılan Suffix: $suffix\n";
+echo "Kullanılan Main URL: $mainUrl\n";
+echo "Kullanılan SwKey: $swKey\n";
 echo "Kullanılan User-Agent: $userAgent\n";
 echo "Kullanılan Referer: $referer\n";
 echo "M3U için User-Agent: $m3uUserAgent\n";
@@ -163,9 +165,9 @@ $options = [
 ];
 $context = stream_context_create($options);
 
-// CANLI YAYINLAR - İLK İSTEK SEÇİLEN HEADER'LAR İLE YAPILACAK
+// CANLI YAYINLAR
 for ($page = 0; $page < $pageCount; $page++) {
-    $apiUrl = $baseUrl . "/api/channel/by/filtres/0/0/$page/" . $suffix;
+    $apiUrl = $mainUrl . "/api/channel/by/filtres/0/0/$page/" . $swKey;
     $response = @file_get_contents($apiUrl, false, $context);
     
     if ($response === FALSE) {
@@ -185,7 +187,7 @@ for ($page = 0; $page < $pageCount; $page++) {
                 if (($source['type'] ?? '') === 'm3u8' && isset($source['url'])) {
                     $title = $content['title'] ?? '';
                     $image = isset($content['image']) ? (
-                        (strpos($content['image'], 'http') === 0) ? $content['image'] : $baseUrl . '/' . ltrim($content['image'], '/')
+                        (strpos($content['image'], 'http') === 0) ? $content['image'] : $mainUrl . '/' . ltrim($content['image'], '/')
                     ) : '';
                     $categories = isset($content['categories']) && is_array($content['categories'])
                         ? implode(", ", array_column($content['categories'], 'title'))
@@ -203,22 +205,22 @@ for ($page = 0; $page < $pageCount; $page++) {
 
 // FİLMLER
 $movieApis = [
-    "api/movie/by/filtres/0/created/SAYFA/$suffix"   => "Son Filmler",
-    "api/movie/by/filtres/14/created/SAYFA/$suffix"  => "Aile",
-    "api/movie/by/filtres/1/created/SAYFA/$suffix"   => "Aksiyon",
-    "api/movie/by/filtres/13/created/SAYFA/$suffix"  => "Animasyon",
-    "api/movie/by/filtres/19/created/SAYFA/$suffix"  => "Belgesel Filmleri",
-    "api/movie/by/filtres/4/created/SAYFA/$suffix"   => "Bilim Kurgu",
-    "api/movie/by/filtres/2/created/SAYFA/$suffix"   => "Dram",
-    "api/movie/by/filtres/10/created/SAYFA/$suffix"  => "Fantastik",
-    "api/movie/by/filtres/3/created/SAYFA/$suffix"   => "Komedi",
-    "api/movie/by/filtres/8/created/SAYFA/$suffix"   => "Korku",
-    "api/movie/by/filtres/17/created/SAYFA/$suffix"  => "Macera",
-    "api/movie/by/filtres/5/created/SAYFA/$suffix"   => "Romantik",
+    "api/movie/by/filtres/0/created/SAYFA/$swKey"   => "Son Filmler",
+    "api/movie/by/filtres/14/created/SAYFA/$swKey"  => "Aile",
+    "api/movie/by/filtres/1/created/SAYFA/$swKey"   => "Aksiyon",
+    "api/movie/by/filtres/13/created/SAYFA/$swKey"  => "Animasyon",
+    "api/movie/by/filtres/19/created/SAYFA/$swKey"  => "Belgesel Filmleri",
+    "api/movie/by/filtres/4/created/SAYFA/$swKey"   => "Bilim Kurgu",
+    "api/movie/by/filtres/2/created/SAYFA/$swKey"   => "Dram",
+    "api/movie/by/filtres/10/created/SAYFA/$swKey"  => "Fantastik",
+    "api/movie/by/filtres/3/created/SAYFA/$swKey"   => "Komedi",
+    "api/movie/by/filtres/8/created/SAYFA/$swKey"   => "Korku",
+    "api/movie/by/filtres/17/created/SAYFA/$swKey"  => "Macera",
+    "api/movie/by/filtres/5/created/SAYFA/$swKey"   => "Romantik",
 ];
 foreach ($movieApis as $movieApi => $categoryName) {
     for ($page = 0; $page <= 25; $page++) {
-        $apiUrl = $baseUrl . '/' . str_replace('SAYFA', $page, $movieApi);
+        $apiUrl = $mainUrl . '/' . str_replace('SAYFA', $page, $movieApi);
         $response = @file_get_contents($apiUrl, false, $context);
         
         if ($response === FALSE) {
@@ -238,7 +240,7 @@ foreach ($movieApis as $movieApi => $categoryName) {
                     if (($source['type'] ?? '') === 'm3u8' && isset($source['url'])) {
                         $title = $content['title'] ?? '';
                         $image = isset($content['image']) ? (
-                            (strpos($content['image'], 'http') === 0) ? $content['image'] : $baseUrl . '/' . ltrim($content['image'], '/')
+                            (strpos($content['image'], 'http') === 0) ? $content['image'] : $mainUrl . '/' . ltrim($content['image'], '/')
                         ) : '';
                         $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categoryName\", $title\n";
                         $m3uContent .= "#EXTVLCOPT:http-user-agent=$m3uUserAgent\n";
@@ -253,11 +255,11 @@ foreach ($movieApis as $movieApi => $categoryName) {
 
 // DİZİLER
 $seriesApis = [
-    "api/serie/by/filtres/0/created/SAYFA/$suffix" => "Son Diziler"
+    "api/serie/by/filtres/0/created/SAYFA/$swKey" => "Son Diziler"
 ];
 foreach ($seriesApis as $seriesApi => $categoryName) {
     for ($page = 0; $page <= 25; $page++) {
-        $apiUrl = $baseUrl . '/' . str_replace('SAYFA', $page, $seriesApi);
+        $apiUrl = $mainUrl . '/' . str_replace('SAYFA', $page, $seriesApi);
         $response = @file_get_contents($apiUrl, false, $context);
         
         if ($response === FALSE) {
@@ -277,7 +279,7 @@ foreach ($seriesApis as $seriesApi => $categoryName) {
                     if (($source['type'] ?? '') === 'm3u8' && isset($source['url'])) {
                         $title = $content['title'] ?? '';
                         $image = isset($content['image']) ? (
-                            (strpos($content['image'], 'http') === 0) ? $content['image'] : $baseUrl . '/' . ltrim($content['image'], '/')
+                            (strpos($content['image'], 'http') === 0) ? $content['image'] : $mainUrl . '/' . ltrim($content['image'], '/')
                         ) : '';
                         $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categoryName\", $title\n";
                         $m3uContent .= "#EXTVLCOPT:http-user-agent=$m3uUserAgent\n";
