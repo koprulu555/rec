@@ -10,7 +10,7 @@ $pageCount = 4;
 $m3uUserAgent = 'googleusercontent';
 
 // Github kaynak dosyası
-$sourceUrlRaw = 'https://raw.githubusercontent.com/kerimmkirac/cs-kerim2/main/RecTV/src/main/kotlin/com/kerimmkirac/RecTV.kt';
+$sourceUrlRaw = 'https://raw.githubusercontent.com/nikyokki/nik-cloudstream/refs/heads/master/RecTV/src/main/kotlin/com/keyiflerolsun/RecTV.kt';
 $proxyUrl = 'https://api.codetabs.com/v1/proxy/?quest=' . urlencode($sourceUrlRaw);
 
 // 1. ADIM: Github'dan header bilgilerini çek
