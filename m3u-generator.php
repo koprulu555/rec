@@ -1,6 +1,6 @@
 <?php
-// Varsayılanlar (ikinci ihtimal - fallback)
-$defaultBaseUrl = 'https://m.prectv55.lol';
+// Varsayılanlar (fallback)
+$defaultBaseUrl = 'https://m.prectv49.sbs';
 $defaultSuffix = '4F5A9C3D9A86FA54EACEDDD635185/c3c5bd17-e37b-4b94-a944-8a3688a30452/';
 $defaultUserAgent = 'Dart/3.7 (dart:io)';
 $defaultReferer = 'https://twitter.com/';
@@ -9,19 +9,12 @@ $pageCount = 4;
 // M3U çıktısı için sabit User-Agent
 $m3uUserAgent = 'googleusercontent';
 
-// Github kaynak dosyası (ilk ihtimal)
+// Github kaynak dosyası
 $sourceUrlRaw = 'https://raw.githubusercontent.com/kerimmkirac/cs-kerim2/main/RecTV/src/main/kotlin/com/kerimmkirac/RecTV.kt';
 $proxyUrl = 'https://api.codetabs.com/v1/proxy/?quest=' . urlencode($sourceUrlRaw);
 
-// Güncel değerlerin tutulacağı değişkenler (başlangıçta varsayılanlar)
-$baseUrl    = $defaultBaseUrl;
-$suffix     = $defaultSuffix;
-$userAgent  = $defaultUserAgent;
-$referer    = $defaultReferer;
-
-// Github içeriğini çekmek için geliştirilmiş fonksiyon
+// 1. ADIM: Github'dan header bilgilerini çek
 function fetchGithubContent($sourceUrlRaw, $proxyUrl) {
-    // Önce doğrudan deneme
     $context = stream_context_create([
         'http' => [
             'method' => 'GET',
@@ -37,111 +30,125 @@ function fetchGithubContent($sourceUrlRaw, $proxyUrl) {
     $githubContent = @file_get_contents($sourceUrlRaw, false, $context);
     if ($githubContent !== FALSE) return $githubContent;
     
-    // Proxy ile deneme
     $githubContentProxy = @file_get_contents($proxyUrl, false, $context);
     if ($githubContentProxy !== FALSE) return $githubContentProxy;
     
     return FALSE;
 }
 
-// 1. ADIM: Github'dan değerleri çekmeyi dene
+function parseGithubHeaders($githubContent) {
+    $headers = [
+        'baseUrl' => null,
+        'suffix' => null,
+        'userAgent' => null,
+        'referer' => null
+    ];
+    
+    if (preg_match('/override\s+var\s+mainUrl\s*=\s*"([^"]+)"/', $githubContent, $match)) {
+        $headers['baseUrl'] = $match[1];
+    }
+    
+    if (preg_match('/private\s+(val|var)\s+swKey\s*=\s*"([^"]+)"/', $githubContent, $match)) {
+        $headers['suffix'] = $match[2];
+    }
+    
+    if (preg_match('/headers\s*=\s*mapOf\([^)]*"user-agent"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
+        $headers['userAgent'] = $match[1];
+    }
+    
+    if (preg_match('/headers\s*=\s*mapOf\([^)]*"Referer"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
+        $headers['referer'] = $match[1];
+    } else if (preg_match('/referer\s*=\s*"([^"]+)"/', $githubContent, $match)) {
+        $headers['referer'] = $match[1];
+    }
+    
+    return $headers;
+}
+
+// 2. ADIM: API test fonksiyonu
+function testApiWithHeaders($baseUrl, $suffix, $userAgent, $referer) {
+    $testUrl = $baseUrl . '/api/channel/by/filtres/0/0/0/' . $suffix;
+    
+    $opts = [
+        'http' => [
+            'method' => 'GET',
+            'header' => "User-Agent: $userAgent\r\nReferer: $referer\r\n",
+            'timeout' => 15,
+            'ignore_errors' => true
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false
+        ]
+    ];
+    
+    $ctx = stream_context_create($opts);
+    $response = @file_get_contents($testUrl, false, $ctx);
+    
+    if ($response === FALSE) {
+        return false;
+    }
+    
+    $data = json_decode($response, true);
+    return $data !== null && is_array($data);
+}
+
+// 3. ADIM: HANGİ HEADER'LARI KULLANACAĞIMIZI BELİRLE
 $githubContent = fetchGithubContent($sourceUrlRaw, $proxyUrl);
 
 if ($githubContent !== FALSE) {
-    // Github içeriği başarıyla alındı, regex ile değerleri çek
+    $githubHeaders = parseGithubHeaders($githubContent);
     
-    $githubBaseUrl = $baseUrl;
-    $githubSuffix = $suffix;
-    $githubUserAgent = $userAgent;
-    $githubReferer = $referer;
-    
-    $successCount = 0;
-    
-    // mainUrl - Kotlin syntax'ına uygun regex
-    if (preg_match('/override\s+var\s+mainUrl\s*=\s*"([^"]+)"/', $githubContent, $baseUrlMatch)) {
-        $githubBaseUrl = $baseUrlMatch[1];
-        $successCount++;
-    }
-    
-    // swKey - Kotlin syntax'ına uygun regex
-    if (preg_match('/private\s+(val|var)\s+swKey\s*=\s*"([^"]+)"/', $githubContent, $suffixMatch)) {
-        $githubSuffix = $suffixMatch[2];
-        $successCount++;
-    }
-    
-    // user-agent - Kotlin mapOf syntax'ına uygun regex
-    if (preg_match('/headers\s*=\s*mapOf\([^)]*"user-agent"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $uaMatch)) {
-        $githubUserAgent = $uaMatch[1];
-        $successCount++;
-    }
-    
-    // referer - Kotlin mapOf syntax'ına uygun regex
-    if (preg_match('/headers\s*=\s*mapOf\([^)]*"Referer"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $refMatch)) {
-        $githubReferer = $refMatch[1];
-        $successCount++;
-    } 
-    // Alternatif referer arama (ExtractorLink içindeki referer)
-    else if (preg_match('/referer\s*=\s*"([^"]+)"/', $githubContent, $refMatch2)) {
-        $githubReferer = $refMatch2[1];
-        $successCount++;
-    }
-    
-    // 2. ADIM: Github'dan alınan değerleri test et
-    function testApiConnection($baseUrl, $suffix, $userAgent, $referer) {
-        $testUrl = $baseUrl . '/api/channel/by/filtres/0/0/0/' . $suffix;
+    // Github'dan gelen değerlerin hepsi var mı kontrol et
+    if ($githubHeaders['baseUrl'] && $githubHeaders['suffix'] && 
+        $githubHeaders['userAgent'] && $githubHeaders['referer']) {
         
-        $opts = [
-            'http' => [
-                'method' => 'GET',
-                'header' => "User-Agent: $userAgent\r\nReferer: $referer\r\n",
-                'timeout' => 15,
-                'ignore_errors' => true
-            ],
-            'ssl' => [
-                'verify_peer' => false,
-                'verify_peer_name' => false
-            ]
-        ];
+        echo "Github'dan header bilgileri alındı. API testi yapılıyor...\n";
         
-        $ctx = stream_context_create($opts);
-        $response = @file_get_contents($testUrl, false, $ctx);
-        
-        if ($response === FALSE) {
-            return false;
+        // İLK ETAP: Github header'ları ile API testi yap
+        if (testApiWithHeaders(
+            $githubHeaders['baseUrl'], 
+            $githubHeaders['suffix'], 
+            $githubHeaders['userAgent'], 
+            $githubHeaders['referer']
+        )) {
+            echo "✓ Github header'ları ile API başarılı! Github değerleri kullanılıyor.\n";
+            $baseUrl = $githubHeaders['baseUrl'];
+            $suffix = $githubHeaders['suffix'];
+            $userAgent = $githubHeaders['userAgent'];
+            $referer = $githubHeaders['referer'];
+        } else {
+            echo "✗ Github header'ları ile API başarısız! Varsayılan değerler kullanılıyor.\n";
+            $baseUrl = $defaultBaseUrl;
+            $suffix = $defaultSuffix;
+            $userAgent = $defaultUserAgent;
+            $referer = $defaultReferer;
         }
-        
-        $data = json_decode($response, true);
-        return $data !== null && is_array($data);
-    }
-    
-    // Github değerlerini test et
-    if (testApiConnection($githubBaseUrl, $githubSuffix, $githubUserAgent, $githubReferer)) {
-        // BAŞARILI: Github değerleri çalışıyor, kullan
-        $baseUrl = $githubBaseUrl;
-        $suffix = $githubSuffix;
-        $userAgent = $githubUserAgent;
-        $referer = $githubReferer;
-        echo "✓ Github değerleri başarıyla alındı ve test edildi\n";
     } else {
-        // BAŞARISIZ: Github değerleri çalışmıyor, varsayılanlara dön
-        echo "✗ Github değerleri çalışmıyor, varsayılanlar kullanılıyor\n";
+        echo "✗ Github'dan eksik header bilgileri! Varsayılan değerler kullanılıyor.\n";
+        $baseUrl = $defaultBaseUrl;
+        $suffix = $defaultSuffix;
+        $userAgent = $defaultUserAgent;
+        $referer = $defaultReferer;
     }
 } else {
-    // Github'dan içerik alınamadı
-    echo "✗ Github içeriği alınamadı, varsayılanlar kullanılıyor\n";
+    echo "✗ Github içeriği alınamadı! Varsayılan değerler kullanılıyor.\n";
+    $baseUrl = $defaultBaseUrl;
+    $suffix = $defaultSuffix;
+    $userAgent = $defaultUserAgent;
+    $referer = $defaultReferer;
 }
 
-// 3. ADIM: Son kullanılacak değerleri göster
+// 4. ADIM: SONUÇLARI GÖSTER
 echo "Kullanılan Base URL: $baseUrl\n";
 echo "Kullanılan Suffix: $suffix\n";
 echo "Kullanılan User-Agent: $userAgent\n";
 echo "Kullanılan Referer: $referer\n";
 echo "M3U için User-Agent: $m3uUserAgent\n";
 
-// M3U çıktısı oluştur
+// 5. ADIM: API İSTEKLERİNİ SEÇİLEN HEADER'LAR İLE YAP
 $m3uContent = "#EXTM3U\n";
 
-// API çağrılarında kullanılacak context (Github'dan alınan veya varsayılan header'lar ile)
 $options = [
     'http' => [
         'method' => 'GET',
@@ -156,17 +163,19 @@ $options = [
 ];
 $context = stream_context_create($options);
 
-// CANLI YAYINLAR
+// CANLI YAYINLAR - İLK İSTEK SEÇİLEN HEADER'LAR İLE YAPILACAK
 for ($page = 0; $page < $pageCount; $page++) {
     $apiUrl = $baseUrl . "/api/channel/by/filtres/0/0/$page/" . $suffix;
     $response = @file_get_contents($apiUrl, false, $context);
     
     if ($response === FALSE) {
+        echo "API hatası: $apiUrl\n";
         continue;
     }
     
     $data = json_decode($response, true);
     if ($data === null || !is_array($data)) {
+        echo "JSON decode hatası: $apiUrl\n";
         continue;
     }
 
@@ -182,7 +191,6 @@ for ($page = 0; $page < $pageCount; $page++) {
                         ? implode(", ", array_column($content['categories'], 'title'))
                         : '';
                     
-                    // M3U çıktısında: User-Agent SABİT, Referer dinamik (Github'dan veya varsayılan)
                     $m3uContent .= "#EXTINF:-1 tvg-id=\"{$content['id']}\" tvg-name=\"$title\" tvg-logo=\"$image\" group-title=\"$categories\", $title\n";
                     $m3uContent .= "#EXTVLCOPT:http-user-agent=$m3uUserAgent\n";
                     $m3uContent .= "#EXTVLCOPT:http-referrer=$referer\n";
@@ -193,7 +201,7 @@ for ($page = 0; $page < $pageCount; $page++) {
     }
 }
 
-// FİLMLER (aynı mantık)
+// FİLMLER
 $movieApis = [
     "api/movie/by/filtres/0/created/SAYFA/$suffix"   => "Son Filmler",
     "api/movie/by/filtres/14/created/SAYFA/$suffix"  => "Aile",
@@ -213,10 +221,16 @@ foreach ($movieApis as $movieApi => $categoryName) {
         $apiUrl = $baseUrl . '/' . str_replace('SAYFA', $page, $movieApi);
         $response = @file_get_contents($apiUrl, false, $context);
         
-        if ($response === FALSE) continue;
+        if ($response === FALSE) {
+            echo "API hatası: $apiUrl\n";
+            continue;
+        }
         
         $data = json_decode($response, true);
-        if ($data === null) continue;
+        if ($data === null) {
+            echo "JSON decode hatası: $apiUrl\n";
+            continue;
+        }
 
         foreach ($data as $content) {
             if (isset($content['sources']) && is_array($content['sources'])) {
@@ -237,7 +251,7 @@ foreach ($movieApis as $movieApi => $categoryName) {
     }
 }
 
-// DİZİLER (aynı mantık)
+// DİZİLER
 $seriesApis = [
     "api/serie/by/filtres/0/created/SAYFA/$suffix" => "Son Diziler"
 ];
@@ -246,10 +260,16 @@ foreach ($seriesApis as $seriesApi => $categoryName) {
         $apiUrl = $baseUrl . '/' . str_replace('SAYFA', $page, $seriesApi);
         $response = @file_get_contents($apiUrl, false, $context);
         
-        if ($response === FALSE) continue;
+        if ($response === FALSE) {
+            echo "API hatası: $apiUrl\n";
+            continue;
+        }
         
         $data = json_decode($response, true);
-        if ($data === null) continue;
+        if ($data === null) {
+            echo "JSON decode hatası: $apiUrl\n";
+            continue;
+        }
 
         foreach ($data as $content) {
             if (isset($content['sources']) && is_array($content['sources'])) {
