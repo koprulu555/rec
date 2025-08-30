@@ -9,7 +9,7 @@ $pageCount = 4;
 // M3U çıktısı için sabit User-Agent
 $m3uUserAgent = 'googleusercontent';
 
-// Github kaynak dosyası
+// YENİ Github kaynak dosyası
 $sourceUrlRaw = 'https://raw.githubusercontent.com/nikyokki/nik-cloudstream/refs/heads/master/RecTV/src/main/kotlin/com/keyiflerolsun/RecTV.kt';
 $proxyUrl = 'https://api.codetabs.com/v1/proxy/?quest=' . urlencode($sourceUrlRaw);
 
@@ -62,10 +62,19 @@ function parseGithubHeaders($githubContent) {
         echo "Github'dan userAgent alındı: " . $headers['userAgent'] . "\n";
     }
     
-    // referer - headers mapOf içinde
-    if (preg_match('/headers\s*=\s*mapOf\([^)]*"Referer"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
+    // referer - iki farklı şekilde arıyoruz
+    if (preg_match('/this\.referer\s*=\s*"([^"]+)"/', $githubContent, $match)) {
         $headers['referer'] = $match[1];
-        echo "Github'dan referer alındı: " . $headers['referer'] . "\n";
+        echo "Github'dan referer alındı (this.referer): " . $headers['referer'] . "\n";
+    } 
+    else if (preg_match('/referer\s*=\s*"([^"]+)"/', $githubContent, $match)) {
+        $headers['referer'] = $match[1];
+        echo "Github'dan referer alındı (referer): " . $headers['referer'] . "\n";
+    }
+    // headers mapOf içinde referer
+    else if (preg_match('/headers\s*=\s*mapOf\([^)]*"Referer"[^)]*to[^"]*"([^"]+)"/s', $githubContent, $match)) {
+        $headers['referer'] = $match[1];
+        echo "Github'dan referer alındı (headers): " . $headers['referer'] . "\n";
     }
     
     return $headers;
