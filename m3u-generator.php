@@ -1,6 +1,6 @@
 <?php
 // Varsayılanlar (fallback - SADECE BAŞARISIZLIK DURUMUNDA)
-$defaultMainUrl = 'https://a.prectv67.lol';
+$defaultMainUrl = 'https://m.prectv50.sbs';
 $defaultSwKey = '4F5A9C3D9A86FA54EACEDDD635185/c3c5bd17-e37b-4b94-a944-8a3688a30452/';
 $defaultUserAgent = 'Mozilla/5.0';
 $defaultReferer = 'https://twitter.com/';
